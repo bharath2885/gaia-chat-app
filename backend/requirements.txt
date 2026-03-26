@@ -1,0 +1,7 @@
+fastapi>=0.111
+uvicorn[standard]>=0.30
+pydantic>=2.0
+pydantic-settings>=2.3
+# gaia-sdk is a local package — install with: pip install -e sdk/python
+# (from the project root) or run: make sdk-install
+gaia-sdk

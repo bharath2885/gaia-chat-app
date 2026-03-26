@@ -1,0 +1,28 @@
+# Environment — never commit secrets
+.env
+backend/.env
+frontend/.env
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+.venv/
+dist/
+
+# Node
+node_modules/
+frontend/node_modules/
+frontend/dist/
+
+# Logs
+logs/
+*.log
+
+# Docker / OS
+.DS_Store
+Thumbs.db
+
+# Secrets / runtime
+.webui_secret_key

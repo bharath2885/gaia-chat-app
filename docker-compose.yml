@@ -1,0 +1,75 @@
+# =============================================================================
+# Gaia Chat App — Docker Compose
+#
+# QUICK START
+#   1. Copy .env.example → .env and set GAIA_API_KEY
+#   2. Run:  docker compose up --build
+#
+# To also start OpenWebUI (ChatGPT-style interface):
+#   docker compose --profile openwebui up --build
+#
+# Ports when running:
+#   http://localhost:5173   → Gaia Chat App (custom UI)
+#   http://localhost:8000   → Backend API  (also used by OpenWebUI)
+#   http://localhost:8080   → OpenWebUI    (--profile openwebui only)
+# =============================================================================
+
+services:
+
+  # ── FastAPI backend ──────────────────────────────────────────────────────────
+  backend:
+    build:
+      context: .                                  # 02-chat-app directory (self-contained)
+      dockerfile: Dockerfile.backend
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    environment:
+      # Allow requests from the frontend container and local browser
+      ALLOW_CORS_ORIGIN: "http://localhost:5173"
+    volumes:
+      - ./logs:/app/logs
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/docs')"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  # ── React frontend (nginx) ───────────────────────────────────────────────────
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "5173:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # ── OpenWebUI (optional — enable with --profile openwebui) ──────────────────
+  openwebui:
+    profiles: ["openwebui"]
+    image: ghcr.io/open-webui/open-webui:main
+    ports:
+      - "8080:8080"
+    environment:
+      # Point OpenWebUI at the Gaia backend's OpenAI-compatible endpoint
+      OPENAI_API_BASE_URL: "http://backend:8000/v1"
+      OPENAI_API_KEY: "placeholder"              # required by OpenWebUI; value ignored by backend
+      # Disable Ollama (we're not using it)
+      ENABLE_OLLAMA_API: "false"
+      # Persist chat history
+      DATA_DIR: /app/backend/data
+    volumes:
+      - openwebui_data:/app/backend/data
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  openwebui_data:
