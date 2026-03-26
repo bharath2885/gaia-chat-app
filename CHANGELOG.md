@@ -4,6 +4,30 @@ All notable changes to the Gaia Chat Application are documented here.
 
 ---
 
+## [1.2.0] — 2026-03-27
+
+### Added — Gaia Knowledge Provider for OpenWebUI
+- **`openwebui/gaia_knowledge_filter.py`** — OpenWebUI Filter Function that intercepts
+  chat requests, detects attached `gaia:*` knowledge collections, and injects live
+  semantic search results from Gaia into the LLM context window before each call.
+- **`openwebui/gaia_knowledge_setup.py`** — CLI script that authenticates with the Gaia
+  backend, lists all available datasets, and auto-creates matching OpenWebUI Knowledge
+  collections (named `gaia:<DatasetName>`) with metadata placeholder files.
+- **`openwebui/README.md`** — step-by-step integration guide (function upload, valve
+  configuration, collection attachment, and troubleshooting).
+- **`backend/api/routes.py`** — new `POST /api/v1/datasets/{name}/search` endpoint:
+  wraps Gaia's `similar-document-parts` semantic search API and normalises the response
+  into a flat list of `{text, source, score}` chunks for easy context injection.
+
+### How It Works
+Gaia datasets now surface as live knowledge repositories in OpenWebUI's
+"Attach Knowledge" dropdown.  When a user selects a `gaia:*` collection, the Filter
+Function fires before the LLM, queries Gaia's semantic search API for the most relevant
+passages, and prepends them to the system prompt.  No data duplication — retrieval is
+always live and up-to-date.
+
+---
+
 ## [1.1.0] — 2026-03-26
 
 ### Fixed

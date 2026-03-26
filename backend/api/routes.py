@@ -5,6 +5,7 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, Header, HTTPException, status
 from fastapi.responses import StreamingResponse
+from pydantic import BaseModel
 
 from backend.api.dependencies import require_session
 from backend.models.api_models import (
@@ -279,6 +280,84 @@ async def get_theme_questions(
     except HTTPException:
         raise
     except Exception as exc:
+        raise HTTPException(status_code=502, detail=str(exc))
+
+
+# ── Semantic Search (for OpenWebUI Knowledge integration) ────────────
+
+class SearchRequest(BaseModel):
+    query: str
+    limit: int = 5
+
+
+@router.post("/datasets/{dataset_name}/search", tags=["Search"])
+async def semantic_search(
+    dataset_name: str,
+    body: SearchRequest,
+    api_key: str = Depends(require_session),
+):
+    """Semantic chunk search — used by the OpenWebUI Gaia Knowledge Filter.
+
+    Calls Gaia's similar-document-parts endpoint and returns ranked chunks
+    ready for injection into an LLM context window.
+    """
+    import httpx
+    s = get_settings()
+    headers = {"apiKey": api_key, "Accept": "application/json", "Content-Type": "application/json"}
+    payload = {
+        "datasetName": dataset_name,
+        "queryString": body.query,
+        "pageSize": body.limit,
+    }
+    try:
+        async with httpx.AsyncClient(verify=s.gaia_verify_ssl, timeout=30) as client:
+            resp = await client.post(
+                f"{s.gaia_base_url}/search/similar-document-parts",
+                headers=headers,
+                json=payload,
+            )
+        if resp.status_code == 200:
+            data = resp.json()
+            logger.info("search ✓ dataset=%r query=%r keys=%s", dataset_name, body.query[:60], list(data.keys()) if isinstance(data, dict) else type(data).__name__)
+            # Normalise various response shapes into a flat list of chunks
+            raw_chunks = (
+                data.get("documentParts")
+                or data.get("results")
+                or data.get("chunks")
+                or data.get("items")
+                or (data if isinstance(data, list) else [])
+            )
+            chunks = []
+            for part in raw_chunks:
+                text = (
+                    part.get("text")
+                    or part.get("content")
+                    or part.get("chunk")
+                    or part.get("documentText")
+                    or ""
+                )
+                source = (
+                    part.get("documentName")
+                    or part.get("source")
+                    or part.get("fileName")
+                    or part.get("title")
+                    or ""
+                )
+                score = (
+                    part.get("score")
+                    or part.get("similarity")
+                    or part.get("relevanceScore")
+                    or 0.0
+                )
+                if text:
+                    chunks.append({"text": text, "source": source, "score": score})
+            return {"dataset": dataset_name, "query": body.query, "chunks": chunks}
+        logger.warning("search → HTTP %d dataset=%r body=%s", resp.status_code, dataset_name, resp.text[:300])
+        raise HTTPException(status_code=resp.status_code, detail=resp.text)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.error("search error dataset=%r: %s", dataset_name, exc)
         raise HTTPException(status_code=502, detail=str(exc))
 
 
