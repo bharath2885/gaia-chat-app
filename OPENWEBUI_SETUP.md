@@ -103,6 +103,98 @@ The filter retrieves live Gaia passages and injects them into the context.
 
 ---
 
+## 6. Configuring Open WebUI in the browser (step by step)
+
+The launcher pre-configures everything, but here's how to view/change it in the
+UI — and exactly what to do when you add more datasets.
+
+> Menu labels are for Open WebUI 0.8.x. Admin screens are reached from the
+> **profile menu at the bottom-left → Admin Panel → Settings**.
+
+### A. Verify the Gaia connection (Pattern A — datasets as models)
+
+1. Bottom-left **profile menu → Admin Panel → Settings → Connections**.
+2. Under **OpenAI API** you should see one connection:
+   - **Base URL:** `http://localhost:8000/v1`
+   - **API Key:** your Gaia API key
+3. Click the **↻ refresh / verify** icon next to it — it should succeed and the
+   connection lights up. (This is what makes every Gaia dataset appear as a model.)
+4. To add it manually if it's ever missing: click **+**, enter the Base URL and
+   key above, **Save**.
+
+### B. Manage which datasets appear as models
+
+With 167 datasets the model list is long. To curate it:
+
+1. **Admin Panel → Settings → Models.**
+2. Each model (= dataset) has a **visibility toggle** (show/hide) and a pencil to
+   rename/describe. Hide the ones you don't use so the chat dropdown stays short.
+3. Optionally set a **default model** here.
+
+### C. Use a dataset in chat (Pattern A)
+
+1. **New Chat → click the model name** at the top.
+2. Type to filter (e.g. `Airline`) and pick the dataset.
+3. Ask your question — the answer is grounded in that Gaia dataset.
+
+### D. The Gaia Knowledge Filter (Pattern B)
+
+1. **Workspace (left sidebar) → Functions.** You'll see **Gaia Knowledge**.
+2. Confirm the toggle is **On** (green) and it's **Global** (applies to all models).
+3. Click the **gear (Valves)** to view/edit:
+   - `gaia_backend_url` = `http://localhost:8000`
+   - `gaia_session_id` = (auto-refreshed by the launcher each start)
+   - `num_results`, `collection_prefix` (`gaia:`), `debug_logging`
+4. To use it in a chat: click **+ / paperclip → Knowledge** and select a `gaia:*`
+   collection, **or** type `#gaia:<DatasetName>` in your message.
+
+---
+
+## Adding more datasets — the two cases
+
+### Case 1: a dataset was newly created in Gaia
+**No Open WebUI config needed** for Pattern A. The model list is read live from
+Gaia. Just **reload the page** (or Admin → Settings → Connections → ↻ refresh)
+and the new dataset appears in the model dropdown.
+
+### Case 2: make a dataset attachable as Knowledge (Pattern B)
+
+Either register via the script (recommended — handles the `gaia:` naming and the
+metadata file):
+
+```bash
+TOKEN=$(curl -s -X POST http://localhost:8080/api/v1/auths/signin \
+  -H 'Content-Type: application/json' \
+  -d '{"email":"admin@gaia.local","password":"gaia-admin-2026"}' | jq -r .token)
+
+python openwebui/gaia_knowledge_setup.py \
+  --gaia-backend http://localhost:8000 \
+  --gaia-api-key "$(grep '^GAIA_API_KEY=' .env | cut -d= -f2-)" \
+  --owui-url http://localhost:8080 --owui-token "$TOKEN" \
+  --only "My_New_Dataset"          # or --limit N, or omit for ALL datasets
+```
+
+…**or** create it by hand in the UI:
+
+1. **Workspace → Knowledge → + Create Knowledge Collection.**
+2. **Name it exactly** `gaia:<DatasetName>` — the `gaia:` prefix is the trigger
+   the filter matches. (Description is free text.)
+3. Save. It now appears in **Attach Knowledge**; the filter does live retrieval —
+   you do **not** need to upload any documents.
+
+> The dataset name after `gaia:` must match the Gaia dataset name exactly
+> (it's passed straight to the Gaia search).
+
+### Optional: add a general LLM so Pattern B can synthesise
+
+The filter injects Gaia passages, then a model answers. For a non-Gaia answerer:
+
+1. **Admin Panel → Settings → Connections → +** (OpenAI or Ollama).
+2. For OpenAI: Base URL `https://api.openai.com/v1`, paste your OpenAI key, Save.
+3. In a chat, pick that model, attach a `gaia:` collection (or `#gaia:…`), and ask.
+
+---
+
 ## What was changed to make this work
 
 These fixes live on `feature/openwebui-integration`:
