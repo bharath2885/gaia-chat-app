@@ -9,6 +9,7 @@ from fastapi.responses import JSONResponse
 
 from backend.api.routes import router
 from backend.api.openai_compat import router as openai_router
+from backend.api.cohesity_routes import router as cohesity_router
 from backend.middleware.request_logger import RequestLoggerMiddleware
 from backend.services.session_service import cleanup_expired
 from backend.settings import get_settings
@@ -64,6 +65,7 @@ def create_app() -> FastAPI:
         return JSONResponse(status_code=status_code, content={"detail": str(exc)})
 
     app.include_router(router, prefix="/api/v1")
+    app.include_router(cohesity_router, prefix="/api/v1")
     app.include_router(openai_router, prefix="/v1", tags=["OpenAI-compatible"])
 
     return app

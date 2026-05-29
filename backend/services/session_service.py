@@ -4,7 +4,15 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Dict, Optional, Tuple
 
-_sessions: Dict[str, Tuple[str, datetime]] = {}
+# Permanent demo session — used by the OpenWebUI Cohesity filter when no real
+# Gaia API key is available.  The cohesity/* routes don't forward this key to
+# Gaia; it is only used to satisfy the require_session auth gate.
+_DEMO_SESSION_ID = "cohesity-demo-session-2025"
+_DEMO_API_KEY    = "demo"
+
+_sessions: Dict[str, Tuple[str, datetime]] = {
+    _DEMO_SESSION_ID: (_DEMO_API_KEY, datetime(9999, 12, 31, tzinfo=timezone.utc)),
+}
 
 
 def create_session(api_key: str, ttl_minutes: int = 60) -> str:

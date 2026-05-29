@@ -22,6 +22,15 @@ class Settings(BaseSettings):
     )
     session_ttl_minutes: int = Field(default=60, validation_alias="SESSION_TTL_MINUTES")
 
+    # ── Cohesity Smart Files ─────────────────────────────────────────────
+    cohesity_cluster_url: str = Field(default="", validation_alias="COHESITY_CLUSTER_URL")
+    cohesity_username: str = Field(default="", validation_alias="COHESITY_USERNAME")
+    cohesity_password: str = Field(default="", validation_alias="COHESITY_PASSWORD")
+    cohesity_domain: str = Field(default="LOCAL", validation_alias="COHESITY_DOMAIN")
+    cohesity_api_key: str = Field(default="", validation_alias="COHESITY_API_KEY")
+    cohesity_verify_ssl: bool = Field(default=False, validation_alias="COHESITY_VERIFY_SSL")
+    cohesity_max_file_kb: int = Field(default=256, validation_alias="COHESITY_MAX_FILE_KB")
+
 
 @lru_cache()
 def get_settings() -> Settings:

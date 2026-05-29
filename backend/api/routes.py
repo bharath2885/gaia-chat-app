@@ -5,6 +5,7 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, Header, HTTPException, status
 from fastapi.responses import StreamingResponse
+from pydantic import BaseModel
 
 from backend.api.dependencies import require_session
 from backend.models.api_models import (
@@ -280,6 +281,74 @@ async def get_theme_questions(
         raise
     except Exception as exc:
         raise HTTPException(status_code=502, detail=str(exc))
+
+
+# ── Semantic Search (for OpenWebUI Knowledge integration) ────────────
+
+class SearchRequest(BaseModel):
+    query: str
+    limit: int = 5
+
+
+@router.post("/datasets/{dataset_name}/search", tags=["Search"])
+async def semantic_search(
+    dataset_name: str,
+    body: SearchRequest,
+    api_key: str = Depends(require_session),
+):
+    """Semantic chunk search — used by the OpenWebUI Gaia Knowledge Filter.
+
+    Retrieves the passages Gaia used to ground its answer and returns them as
+    ranked chunks ready for injection into an LLM context window.
+
+    Implementation note: this calls Gaia's RAG `/ask` endpoint (which is
+    available on all Gaia tenants) and returns the `documents` it cites. The
+    older `/search/similar-document-parts` endpoint is not exposed on every
+    Helios deployment (it 404s), so `/ask` is the portable primitive here.
+    """
+    try:
+        async with _make_client(api_key) as gaia:
+            result = await gaia.ask(dataset_names=[dataset_name], query=body.query)
+    except Exception as exc:
+        logger.error("search error dataset=%r: %s", dataset_name, exc)
+        raise HTTPException(status_code=502, detail=str(exc))
+
+    documents = getattr(result, "documents", None) or []
+    answer = getattr(result, "response_string", "") or ""
+    logger.info(
+        "search ✓ dataset=%r query=%r → %d source doc(s), answer_len=%d",
+        dataset_name, body.query[:60], len(documents), len(answer),
+    )
+
+    chunks: list[dict] = []
+    for raw in documents[: body.limit]:
+        # documents may be pydantic models (SDK) or plain dicts — normalise.
+        part = raw.model_dump(by_alias=True) if hasattr(raw, "model_dump") else dict(raw)
+        text = (
+            part.get("snippet")
+            or part.get("text")
+            or part.get("content")
+            or part.get("documentText")
+            or ""
+        )
+        source = (
+            part.get("filename")
+            or part.get("filepath")
+            or part.get("documentName")
+            or part.get("source")
+            or ""
+        )
+        score = part.get("score") or part.get("similarity") or 0.0
+        if text:
+            chunks.append({"text": text, "source": source, "score": score})
+
+    # Fallback: if Gaia cited no discrete documents but produced a grounded
+    # answer, surface that answer as a single chunk so the filter still has
+    # context to inject.
+    if not chunks and answer and not answer.lower().startswith("i am sorry"):
+        chunks.append({"text": answer, "source": f"Gaia: {dataset_name}", "score": 1.0})
+
+    return {"dataset": dataset_name, "query": body.query, "chunks": chunks}
 
 
 # ── Documents ────────────────────────────────────────────────────────

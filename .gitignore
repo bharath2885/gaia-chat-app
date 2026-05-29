@@ -9,7 +9,11 @@ __pycache__/
 *.pyo
 *.egg-info/
 .venv/
+venv/
+venv*/
+env/
 dist/
+build/
 
 # Node
 node_modules/
@@ -26,3 +30,7 @@ Thumbs.db
 
 # Secrets / runtime
 .webui_secret_key
+*.db
+*.sqlite3
+data/
+webui_data/
