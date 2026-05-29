@@ -63,6 +63,33 @@ for i in $(seq 1 60); do
   sleep 2
 done
 
+# ── 3. Refresh the Gaia Knowledge Filter session (Pattern B) ─────────────────
+# Gaia backend sessions are in-memory and wiped on restart, so the filter's
+# gaia_session_id valve goes stale every launch. Mint a fresh one and update
+# the valve automatically. Best-effort: never blocks startup.
+OWUI_ADMIN_EMAIL="${OWUI_ADMIN_EMAIL:-admin@gaia.local}"
+OWUI_ADMIN_PASSWORD="${OWUI_ADMIN_PASSWORD:-gaia-admin-2026}"
+PY="$APP_DIR/venv/bin/python"
+{
+  TOKEN=$(curl -s -X POST http://localhost:8080/api/v1/auths/signin \
+    -H 'Content-Type: application/json' \
+    -d "{\"email\":\"$OWUI_ADMIN_EMAIL\",\"password\":\"$OWUI_ADMIN_PASSWORD\"}" \
+    | "$PY" -c "import sys,json;print(json.load(sys.stdin).get('token',''))" 2>/dev/null)
+  SID=$(curl -s -X POST http://localhost:8000/api/v1/auth/login \
+    -H 'Content-Type: application/json' -d "{\"api_key\":\"$GAIA_API_KEY\"}" \
+    | "$PY" -c "import sys,json;print(json.load(sys.stdin).get('sessionId',''))" 2>/dev/null)
+  if [ -n "$TOKEN" ] && [ -n "$SID" ]; then
+    code=$(curl -s -o /dev/null -w '%{http_code}' \
+      -X POST "http://localhost:8080/api/v1/functions/id/gaia_knowledge/valves/update" \
+      -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+      -d "{\"gaia_backend_url\":\"http://localhost:8000\",\"gaia_session_id\":\"$SID\",\"num_results\":5,\"collection_prefix\":\"gaia:\",\"inject_source_citations\":true,\"debug_logging\":false}")
+    [ "$code" = "200" ] && echo -e "      ${GREEN}✓ Gaia Knowledge Filter session refreshed${NC}" \
+                        || echo -e "      ${YELLOW}! filter valve not updated (HTTP $code) — install the filter first${NC}"
+  else
+    echo -e "      ${YELLOW}! skipped filter refresh (no admin token / session yet)${NC}"
+  fi
+} || true
+
 cat <<EOF
 
 ╔══════════════════════════════════════════════════════════╗
